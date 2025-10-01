@@ -12,7 +12,7 @@ namespace authcheck
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -114,6 +114,52 @@ namespace authcheck
            
 
             app.MapControllers();
+
+            // Add this seed data method before app.Run()
+            using (var scope = app.Services.CreateScope())
+            {
+                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+
+                // Create Admin role if it doesn't exist
+                if (!await roleManager.RoleExistsAsync("Admin"))
+                {
+                    await roleManager.CreateAsync(new IdentityRole("Admin"));
+                }
+
+                // Create Operator role if it doesn't exist
+                if (!await roleManager.RoleExistsAsync("Operator"))
+                {
+                    await roleManager.CreateAsync(new IdentityRole("Operator"));
+                }
+
+                //checking if there is user in the database
+                bool hasAnyUser = await userManager.Users.AnyAsync();
+                if (!hasAnyUser)
+                {
+                    // Create default admin user if it doesn't exist
+                    var adminUser = await userManager.FindByNameAsync("admin");
+                    if (adminUser == null)
+                    {
+                        var admin = new IdentityUser
+                        {
+                            UserName = "admin",
+                            Email = "admin@example.com",
+                            EmailConfirmed = true
+                        };
+
+                        var result = await userManager.CreateAsync(admin, "Admin1!");
+                        if (result.Succeeded)
+                        {
+                            // Assign Admin role to the admin user
+                            await userManager.AddToRoleAsync(admin, "Admin");
+                        }
+                    }
+                }
+
+               
+            }
+
 
             app.Run();
         }

@@ -48,7 +48,7 @@ namespace authcheck.Controllers
 
         // POST: api/User/register
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] UserModel model)
+        public async Task<IActionResult> Register([FromBody] UserRegisterModel model)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -187,6 +187,28 @@ namespace authcheck.Controllers
                 return Ok(new { message = $"Role '{model.Role}' assigned to user '{model.UserName}'." });
 
             return BadRequest(result.Errors);
+        }
+
+        // GET: api/User/list
+        [Authorize(Roles = "Admin")]
+        [HttpGet("list")]
+        public async Task<IActionResult> ListUsers()
+        {
+            var users = _userManager.Users.ToList();
+            var userList = new List<UserModel>();
+
+            foreach (var user in users)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                userList.Add(new UserModel
+                {
+                    UserName = user.UserName,
+                    Email = user.Email,
+                    role = string.Join(", ", roles)
+                });
+            }
+
+            return Ok(userList);
         }
     }
 }
