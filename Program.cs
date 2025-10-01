@@ -32,6 +32,7 @@ namespace authcheck
                 options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+"; // Allowed characters in username
                 
             })
+                .AddRoles<IdentityRole>() // Add role
                 .AddEntityFrameworkStores<AppDBContext>();
 
 

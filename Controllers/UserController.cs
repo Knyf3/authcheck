@@ -27,6 +27,7 @@ namespace authcheck.Controllers
             _configuration = configuration;
         }
         // DELETE: api/User/{username}
+        [Authorize(Roles = "Admin")]
         [HttpDelete("{userName}")]
         public async Task<IActionResult> DeleteUser(string userName)
         {
@@ -92,12 +93,16 @@ namespace authcheck.Controllers
                 return Unauthorized(new { message = "Invalid username or password." });
 
             // Generate JWT token
-            var claims = new[]
+            var roles = await _userManager.GetRolesAsync(user);
+            var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.Id)
             };
+
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? "your_secret_key_here"));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -115,16 +120,45 @@ namespace authcheck.Controllers
         }
 
         // POST: api/User/change-password
-        //[Authorize]
+        [Authorize(Roles = "Admin, Operator")]
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] UserLoginModel model)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var user = await _userManager.FindByNameAsync(model.UserName);
-            if (user == null)
-                return Unauthorized(new { message = "User not found." });
+            IdentityUser user = null;
+
+            //Check if admin
+            if (User.IsInRole("Admin"))
+            {
+                if (string.IsNullOrWhiteSpace(model.UserName))
+                    return BadRequest(new { message = "UserName is required for admin password change." });
+
+                user = await _userManager.FindByNameAsync(model.UserName);
+                if (user == null)
+                    return NotFound(new { message = "User not found." });
+            }
+            else if (User.IsInRole("Operator"))
+            {
+                // Operators can only change their own password
+                user = await _userManager.FindByNameAsync(model.UserName);
+                if (user == null)
+                    return Unauthorized(new { message = "User not found." });
+
+                // If username is provided and does not match, block the request
+                if (!string.IsNullOrEmpty(model.UserName) && !string.Equals(user.UserName, model.UserName, StringComparison.OrdinalIgnoreCase))
+                    return Forbid();
+            }
+            else
+            {
+                return Forbid();
+            }
+
+
+            //var user = await _userManager.FindByNameAsync(model.UserName);
+            //if (user == null)
+            //    return Unauthorized(new { message = "User not found." });
 
             var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             var result = await _userManager.ResetPasswordAsync(user, resetToken, model.Password);
@@ -135,5 +169,24 @@ namespace authcheck.Controllers
             return BadRequest(result.Errors);
         }
 
+        [Authorize(Roles = "Admin")] // Only admins can assign roles
+        [HttpPost("assign-role")]
+        public async Task<IActionResult> AssignRole([FromBody] AssignRoleModel model)
+        {
+            var user = await _userManager.FindByNameAsync(model.UserName);
+            if (user == null)
+                return NotFound(new { message = "User not found." });
+
+            // Create role if it doesn't exist
+            var roleManager = HttpContext.RequestServices.GetRequiredService<RoleManager<IdentityRole>>();
+            if (!await roleManager.RoleExistsAsync(model.Role))
+                await roleManager.CreateAsync(new IdentityRole(model.Role));
+
+            var result = await _userManager.AddToRoleAsync(user, model.Role);
+            if (result.Succeeded)
+                return Ok(new { message = $"Role '{model.Role}' assigned to user '{model.UserName}'." });
+
+            return BadRequest(result.Errors);
+        }
     }
 }

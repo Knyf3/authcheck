@@ -5,7 +5,7 @@ namespace authcheck.Controllers
 {
     [ApiController]
     [Route("[controller]")]
-    [Authorize]
+    [Authorize(Roles = "Admin, Operator")]
     public class WeatherForecastController : ControllerBase
     {
         private static readonly string[] Summaries = new[]
