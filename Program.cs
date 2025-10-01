@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace authcheck
 {
@@ -21,8 +24,37 @@ namespace authcheck
 
             // Add services to the container.
             builder.Services.AddAuthorization();
-            builder.Services.AddIdentityApiEndpoints<IdentityUser>()
+            builder.Services.AddIdentityApiEndpoints<IdentityUser>(options =>
+            {
+                options.SignIn.RequireConfirmedEmail = false;  // Disable email confirmation requirement
+                //options.User.RequireUniqueEmail = false;       // Email doesn't need to be unique
+                
+                options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+"; // Allowed characters in username
+                
+            })
                 .AddEntityFrameworkStores<AppDBContext>();
+
+
+            var jwtKey = builder.Configuration["Jwt:Key"] ?? "your_secret_key_here";
+            var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "authcheck";
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = false,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        ValidIssuer = jwtIssuer,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+                    };
+                });
+
 
 
             builder.Services.AddControllers();
